@@ -1,0 +1,47 @@
+# JAX Converters Evaluation Results
+
+*Last generated on: {{generation_date}}* (YYYY-MM-DD)
+
+This file contains the evaluation results for all converters in table format.
+Please see [README.md](README.md) for more details.
+
+See `models_test.py` for instructions on how to regenerate this table.
+
+## Summary Table
+
+{{table}}
+
+## Errors
+
+{{errors}}
+
+## Description of Converters
+
+Below is a description of all converters that can be found in
+[converters.py](converters.py).
+
+### `jax2tf_xla`
+
+This converter simply converts a JAX model to TF SavedModel with XLA support.
+This is considered the baseline converter and has the largest coverage, because
+we expect all ops to be convertible. However, please see
+[jax2tf Known Issue](https://github.com/google/jax/tree/main/jax/experimental/jax2tf#known-issues)
+for a list of known problems.
+
+### `jax2tf_no_xla_to_tflite`
+
+This converter first converts a JAX model to TF SavedModel format without XLA
+support. Please see [no_xla_limitations.md](../g3doc/no_xla_limitations.md) for a list
+of known limitations for this conversion step.
+
+After that, it converts the SavedModel to TFLite using the
+[TFLite converter](https://www.tensorflow.org/lite/convert).
+
+### `jax2tf_no_xla_to_tfjs`
+
+This converter first converts a JAX model to TF SavedModel format without XLA
+support. Please see [no_xla_limitations.md](../g3doc/no_xla_limitations.md) for a list
+of known limitations for this conversion step.
+
+After that, it converts the SavedModel to TF.js using the
+[TF.js converter](https://www.tensorflow.org/js/guide/conversioni).

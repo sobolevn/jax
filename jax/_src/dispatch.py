@@ -193,7 +193,8 @@ def xla_primitive_callable(prim, *arg_specs: ArgSpec, **params):
     else:
       return out,
   compiled = _xla_callable_uncached(lu.wrap_init(prim_fun), device, None,
-                                    prim.name, donated_invars, False, *arg_specs)
+                                    prim.name, donated_invars, False, True,
+                                    *arg_specs)
   if not prim.multiple_results:
     return lambda *args, **kw: compiled(*args, **kw)[0]
   else:
@@ -231,7 +232,7 @@ def _xla_call_impl(fun: lu.WrappedFun, *args, device, backend, name,
       raise NotImplementedError('Dynamic shapes do not work with Array.')
     arg_specs = [(None, getattr(x, '_device', None)) for x in args]
   compiled_fun = xla_callable(fun, device, backend, name, donated_invars,
-                              keep_unused, *arg_specs)
+                              keep_unused, False, *arg_specs)
   try:
     return compiled_fun(*args)
   except FloatingPointError:
@@ -278,7 +279,7 @@ xla.xla_call_p.def_impl(_xla_call_impl)
 
 
 def sharded_lowering(fun, device, backend, name, donated_invars, keep_unused,
-                     *arg_specs):
+                     from_primitive, *arg_specs):
   # TODO(yashkatariya): Remove the local imports from here when the functions
   # in pxla.py move to dispatch.py or a utils file.
   from jax.interpreters import pxla
@@ -302,6 +303,24 @@ def sharded_lowering(fun, device, backend, name, donated_invars, keep_unused,
       (i for i in in_shardings if i is not None), pxla.EMPTY_ENV.physical_mesh)
   in_shardings = [sharding.OpShardingSharding.get_replicated(da) if i is None else i
                   for i in in_shardings]
+
+  process_index = xb.process_index()
+  local_da = [d for d in da if d.process_index == process_index]
+  # This error is not raised from the `jit` execution path. It's only raised
+  # from the `apply_primitive` path.
+  if from_primitive and len(local_da) != len(da) and not config.jax_spmd_mode:
+    raise ValueError(
+        'Running operations on `Array`s that are not fully addressable is '
+        'dangerous. It’s very important that all processes run the same '
+        'cross-process computations in the same order.\n'
+        'You can set `JAX_SPMD_MODE=1` environment variable or '
+        '`jax.config.update("jax_spmd_mode", True)` or use the context manager '
+        '`with jax._src.config.jax_spmd_mode(True)` to enable running '
+        'multi-process computations.\n'
+        'Remember to run the same computation in the same order on all processes. '
+        'If you’re not already familiar with JAX’s multi-process programming '
+        'model, please read https://jax.readthedocs.io/en/latest/multi_process.html.')
+
   # Pass in a singleton `_UNSPECIFIED` for out_shardings because we don't know
   # the number of output avals at this stage. lower_sharding_computation will
   # apply it to all out_avals.
@@ -314,12 +333,14 @@ def sharded_lowering(fun, device, backend, name, donated_invars, keep_unused,
 
 
 def _xla_callable_uncached(fun: lu.WrappedFun, device, backend, name,
-                           donated_invars, keep_unused, *arg_specs):
+                           donated_invars, keep_unused, from_primitive,
+                           *arg_specs):
   # TODO(yashkatariya): Remove the `and arg_specs` from here once
   # lower_sharding_computation supports no avals as input.
   if config.jax_array and arg_specs:
     return sharded_lowering(fun, device, backend, name,
-                            donated_invars, keep_unused, *arg_specs)
+                            donated_invars, keep_unused, from_primitive,
+                            *arg_specs)
   else:
     return lower_xla_callable(fun, device, backend, name, donated_invars, False,
                               keep_unused, *arg_specs).compile().unsafe_call

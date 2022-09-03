@@ -659,6 +659,11 @@ jax_array = config.define_bool_state(
     help=('If True, new pjit behavior will be enabled and `jax.Array` will be '
           'used.'))
 
+jax_spmd_mode = config.define_bool_state(
+    name='jax_spmd_mode',
+    default=False,
+    help=('If True, multi-process computation will be allowed via '))
+
 
 distributed_debug = config.define_bool_state(
     name='jax_distributed_debug',
